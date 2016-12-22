@@ -58,8 +58,6 @@ func SetOptions(o *Options) {
 
 func init() {
 	client = new(http.Client)
-
-	env = os.Getenv("TKPENV")
 }
 
 // CaptureHandler handle panic on http handler.
