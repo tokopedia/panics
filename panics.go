@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 
 	"strings"
 
@@ -79,6 +81,20 @@ func CaptureHandler(h http.HandlerFunc) http.HandlerFunc {
 		}()
 		h.ServeHTTP(w, r)
 	}
+}
+
+// CaptureBadDeployment will listen to SIGCHLD signal, and send notification when it's receive one.
+func CaptureBadDeployment() {
+	go func() {
+		term := make(chan os.Signal)
+		signal.Notify(term, syscall.SIGCHLD)
+		for {
+			select {
+			case <-term:
+				publishError(errors.New("Failed to deploy an application"), nil, false)
+			}
+		}
+	}()
 }
 
 // CaptureHTTPRouterHandler handle panic on httprouter handler.
