@@ -10,9 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
-	"os/signal"
 	"runtime/debug"
-	"syscall"
 
 	"strings"
 
@@ -52,8 +50,6 @@ func SetOptions(o *Options) {
 		tmp = append(tmp, fmt.Sprintf("`%s: %s`", key, val))
 	}
 	tagString = strings.Join(tmp, " | ")
-
-	CaptureBadDeployment()
 }
 
 func init() {
@@ -84,23 +80,6 @@ func CaptureHandler(h http.HandlerFunc) http.HandlerFunc {
 			}
 		}()
 		h.ServeHTTP(w, r)
-	}
-}
-
-// CaptureBadDeployment will listen to SIGCHLD signal, and send notification when it's receive one.
-func CaptureBadDeployment() {
-	if !capturedBadDeployment {
-		capturedBadDeployment = true
-		go func() {
-			term := make(chan os.Signal)
-			signal.Notify(term, syscall.SIGCHLD)
-			for {
-				select {
-				case <-term:
-					publishError(errors.New("Failed to deploy an application"), nil, false)
-				}
-			}
-		}()
 	}
 }
 
