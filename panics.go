@@ -186,7 +186,7 @@ func publishError(errs error, reqBody []byte, withStackTrace bool) {
 	}
 
 	if customMessage != "" {
-		buffer.WriteString("\n" + customMessage)
+		buffer.WriteString("\n" + customMessage + "\n")
 	}
 
 	if reqBody != nil {
@@ -218,7 +218,8 @@ func publishError(errs error, reqBody []byte, withStackTrace bool) {
 
 func postToSlack(text, snip string) {
 	payload := map[string]interface{}{
-		"text":       text,
+		"text": text,
+		//Enable slack to parse mention @<someone>
 		"link_names": 1,
 		"attachments": []map[string]interface{}{
 			map[string]interface{}{
