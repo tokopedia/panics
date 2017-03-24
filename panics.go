@@ -2,6 +2,7 @@ package panics
 
 import (
 	"bytes"
+  "time"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -233,11 +234,20 @@ func postToSlack(text, snip string) {
 	if slackChannel != "" {
 		payload["channel"] = slackChannel
 	}
-	b, _ := json.Marshal(payload)
+	b, err := json.Marshal(payload)
+  if err != nil {
+    log.Printf("[panics] marshal err",err,text,snip)
+    return
+  }
 
-	resp, err := http.DefaultClient.Post(slackWebhookURL, "application/json", bytes.NewBuffer(b))
+  client := http.Client{
+    Timeout: 5*time.Second,
+  }
+
+	resp, err := client.Post(slackWebhookURL, "application/json", bytes.NewBuffer(b))
 	if err != nil {
-		log.Printf("[panics] error on capturing error : %s \n", err.Error())
+		log.Printf("[panics] error on capturing error : %s %s %s\n", err.Error(),text,snip)
+    return
 	}
 
 	defer resp.Body.Close()
@@ -245,9 +255,9 @@ func postToSlack(text, snip string) {
 	if resp.StatusCode >= 300 {
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("[panics] error on capturing error : %s \n", err)
+			log.Printf("[panics] error on capturing error : %s %s %s\n", err,text,snip)
 			return
 		}
-		log.Printf("[panics] error on capturing error : %s \n", string(b))
+		log.Printf("[panics] error on capturing error : %s %s %s\n", string(b),text,snip)
 	}
 }
