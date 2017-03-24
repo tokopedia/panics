@@ -240,6 +240,8 @@ func postToSlack(text, snip string) {
 		log.Printf("[panics] error on capturing error : %s \n", err.Error())
 	}
 
+	defer resp.Body.Close()
+
 	if resp.StatusCode >= 300 {
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
