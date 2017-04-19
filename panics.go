@@ -2,7 +2,6 @@ package panics
 
 import (
 	"bytes"
-  "time"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,10 +13,12 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"syscall"
+	"time"
 
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/nsqio/go-nsq"
 )
 
 var (
@@ -175,6 +176,29 @@ func CaptureBadDeployment() {
 	}
 }
 
+func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
+	return func(message *nsq.Message) error {
+		var err error
+		defer func() {
+			r := recover()
+
+			if r != nil {
+				switch t := r.(type) {
+				case string:
+					err = errors.New(t)
+				case error:
+					err = t
+				default:
+					err = errors.New("Unknown error")
+				}
+
+				publishError(err, nil, true)
+			}
+		}()
+		return handler(message)
+	}
+}
+
 func publishError(errs error, reqBody []byte, withStackTrace bool) {
 	var text string
 	var snip string
@@ -235,19 +259,19 @@ func postToSlack(text, snip string) {
 		payload["channel"] = slackChannel
 	}
 	b, err := json.Marshal(payload)
-  if err != nil {
-    log.Printf("[panics] marshal err",err,text,snip)
-    return
-  }
+	if err != nil {
+		log.Println("[panics] marshal err", err, text, snip)
+		return
+	}
 
-  client := http.Client{
-    Timeout: 5*time.Second,
-  }
+	client := http.Client{
+		Timeout: 5 * time.Second,
+	}
 
 	resp, err := client.Post(slackWebhookURL, "application/json", bytes.NewBuffer(b))
 	if err != nil {
-		log.Printf("[panics] error on capturing error : %s %s %s\n", err.Error(),text,snip)
-    return
+		log.Printf("[panics] error on capturing error : %s %s %s\n", err.Error(), text, snip)
+		return
 	}
 
 	defer resp.Body.Close()
@@ -255,9 +279,9 @@ func postToSlack(text, snip string) {
 	if resp.StatusCode >= 300 {
 		b, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("[panics] error on capturing error : %s %s %s\n", err,text,snip)
+			log.Printf("[panics] error on capturing error : %s %s %s\n", err, text, snip)
 			return
 		}
-		log.Printf("[panics] error on capturing error : %s %s %s\n", string(b),text,snip)
+		log.Printf("[panics] error on capturing error : %s %s %s\n", string(b), text, snip)
 	}
 }

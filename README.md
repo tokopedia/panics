@@ -12,7 +12,7 @@ panics.SetOptions(&panics.Options{
 	SlackWebhookURL: "https://hooks.slack.com/services/blablabla/blablabla/blabla",
 	Filepath:        "/var/log/myapplication", // it'll generate panics.log
 	Channel:         "slackchannel",
-	
+
 	Tags: panics.Tags{"host": "127.0.0.1", "datacenter":"aws"},
 })
 ```
@@ -47,6 +47,46 @@ http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 })
 negro := negroni.New()
 negro.Use(negroni.HandlerFunc(CaptureNegroniHandler))
+```
+
+# Capture panic on nsq consumer
+```go
+func addConsumer(topic, channel string, handler nsq.HandlerFunc) error {
+	q, err := nsq.NewConsumer(topic, channel, nsq.NewConfig())
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	q.SetLogger(log.New(os.Stderr, "nsq:", log.Ltime), nsq.LogLevelError)
+	q.AddHandler(panics.CaptureNSQConsumer(handler))
+
+	if err := q.ConnectToNSQLookupds([]string{"192.168.100.160:4161"}); err != nil {
+		log.Println(err)
+		return err
+	}
+
+	return nil
+}
+
+func main() {
+	panics.SetOptions(&panics.Options{
+		Env: os.Getenv("TKPENV"),
+		Tags: panics.Tags{
+			"service": "nsq",
+		},
+		SlackWebhookURL: "https://hooks.slack.com/services/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",
+		SlackChannel:    "simba-development",
+	})
+
+	addConsumer("topic", "channel", func(message *nsq.Message) error {
+		var x *int
+		fmt.Println(*x)
+		message.Finish()
+		return nil
+	})
+
+	select {}
+}
 ```
 
 ## Example
