@@ -12,7 +12,7 @@ panics.SetOptions(&panics.Options{
 	SlackWebhookURL: "https://hooks.slack.com/services/blablabla/blablabla/blabla",
 	Filepath:        "/var/log/myapplication", // it'll generate panics.log
 	Channel:         "slackchannel",
-	
+
 	Tags: panics.Tags{"host": "127.0.0.1", "datacenter":"aws"},
 })
 ```
@@ -47,6 +47,18 @@ http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 })
 negro := negroni.New()
 negro.Use(negroni.HandlerFunc(CaptureNegroniHandler))
+```
+
+# Capture panic on nsq consumer
+```go
+q, _ := nsq.NewConsumer("topic", "channel", nsq.NewConfig())
+
+q.AddHandler(panics.CaptureNSQConsumer(func(message *nsq.Message) error {
+	var x *int
+	fmt.Println(*x)
+	message.Finish()
+	return nil
+}))
 ```
 
 ## Example
