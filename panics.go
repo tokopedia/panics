@@ -17,6 +17,7 @@ import (
 
 	"strings"
 
+	"github.com/eapache/go-resiliency/breaker"
 	"github.com/julienschmidt/httprouter"
 	"github.com/nsqio/go-nsq"
 )
@@ -30,6 +31,9 @@ var (
 
 	capturedBadDeployment bool
 	customMessage         string
+
+	// circuitbreaker
+	cb *breaker.Breaker
 )
 
 type Tags map[string]string
@@ -64,6 +68,8 @@ func SetOptions(o *Options) {
 
 func init() {
 	env = os.Getenv("TKPENV")
+	// circuitbreaker to let apps died when got too many panics
+	cb = breaker.New(10, 2, time.Minute*2)
 }
 
 // CaptureHandler handle panic on http handler.
@@ -196,6 +202,31 @@ func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
 			}
 		}()
 		return handler(message)
+	}
+}
+
+func panicRecover() {
+	var err error
+
+	r := cb.Run(func() error {
+		r := recover()
+		if r != nil {
+			switch t := r.(type) {
+			case string:
+				err = errors.New(t)
+			case error:
+				err = t
+			default:
+				err = errors.New("Unknown error")
+			}
+
+			publishError(err, nil, true)
+		}
+		return err
+	})
+
+	if r == breaker.ErrBreakerOpen {
+		return
 	}
 }
 
