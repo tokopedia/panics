@@ -83,13 +83,14 @@ func init() {
 // CaptureHandler handle panic on http handler.
 func CaptureHandler(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var err error
 		request, _ := httputil.DumpRequest(r, true)
 		defer func() {
-			r := panicRecover()
-			if r != nil {
-				publishError(r, request, true)
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+			if !recoveryBreak() {
+				r := panicRecover(recover())
+				if r != nil {
+					publishError(r, request, true)
+					http.Error(w, r.Error(), http.StatusInternalServerError)
+				}
 			}
 		}()
 		h.ServeHTTP(w, r)
@@ -99,13 +100,12 @@ func CaptureHandler(h http.HandlerFunc) http.HandlerFunc {
 // CaptureHTTPRouterHandler handle panic on httprouter handler.
 func CaptureHTTPRouterHandler(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		var err error
 		request, _ := httputil.DumpRequest(r, true)
 		defer func() {
-			r := panicRecover()
+			r := panicRecover(recover())
 			if r != nil {
 				publishError(r, request, true)
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				http.Error(w, r.Error(), http.StatusInternalServerError)
 			}
 		}()
 		h(w, r, ps)
@@ -114,14 +114,14 @@ func CaptureHTTPRouterHandler(h httprouter.Handle) httprouter.Handle {
 
 // CaptureNegroniHandler handle panic on negroni handler.
 func CaptureNegroniHandler(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	var err error
 	request, _ := httputil.DumpRequest(r, true)
 	defer func() {
-		r := panicRecover()
-
-		if r != nil {
-			publishError(r, request, true)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if !recoveryBreak() {
+			r := panicRecover(recover())
+			if r != nil {
+				publishError(r, request, true)
+				http.Error(w, r.Error(), http.StatusInternalServerError)
+			}
 		}
 	}()
 	next(w, r)
@@ -162,8 +162,7 @@ func CaptureBadDeployment() {
 func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
 	return func(message *nsq.Message) error {
 		defer func() {
-			r := panicRecover()
-
+			r := panicRecover(recover())
 			if r != nil {
 				publishError(r, nil, true)
 			}
@@ -172,19 +171,27 @@ func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
 	}
 }
 
-func panicRecover() error {
+func panicRecover(rc interface{}) error {
 	if cb != nil {
 		r := cb.Run(func() error {
-			return recovery()
+			return recovery(rc)
 		})
 		return r
 	}
-	return recovery()
+	return recovery(rc)
 }
 
-func recovery() error {
+func recoveryBreak() bool {
+	if err := cb.Run(func() error {
+		return nil
+	}); err == breaker.ErrBreakerOpen {
+		return true
+	}
+	return false
+}
+
+func recovery(r interface{}) error {
 	var err error
-	r := recover()
 	if r != nil {
 		switch t := r.(type) {
 		case string:
