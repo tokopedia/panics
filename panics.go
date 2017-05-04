@@ -36,6 +36,9 @@ var (
 	cb *breaker.Breaker
 )
 
+// error
+var ErrorPanic = errors.New("Panic happened")
+
 type Tags map[string]string
 
 type Options struct {
@@ -46,6 +49,7 @@ type Options struct {
 	SlackChannel    string
 	Tags            Tags
 	CustomMessage   string
+	DontLetMeDie    bool
 }
 
 func SetOptions(o *Options) {
@@ -63,6 +67,10 @@ func SetOptions(o *Options) {
 
 	customMessage = o.CustomMessage
 
+	// set circuit breaker to nil
+	if o.DontLetMeDie {
+		cb = nil
+	}
 	CaptureBadDeployment()
 }
 
@@ -75,24 +83,14 @@ func init() {
 // CaptureHandler handle panic on http handler.
 func CaptureHandler(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var err error
 		request, _ := httputil.DumpRequest(r, true)
 		defer func() {
-			r := recover()
-
-			if r != nil {
-				switch t := r.(type) {
-				case string:
-					err = errors.New(t)
-				case error:
-					err = t
-				default:
-					err = errors.New("Unknown error")
+			if !recoveryBreak() {
+				r := panicRecover(recover())
+				if r != nil {
+					publishError(r, request, true)
+					http.Error(w, r.Error(), http.StatusInternalServerError)
 				}
-
-				publishError(err, request, true)
-
-				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		}()
 		h.ServeHTTP(w, r)
@@ -102,24 +100,12 @@ func CaptureHandler(h http.HandlerFunc) http.HandlerFunc {
 // CaptureHTTPRouterHandler handle panic on httprouter handler.
 func CaptureHTTPRouterHandler(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		var err error
 		request, _ := httputil.DumpRequest(r, true)
 		defer func() {
-			r := recover()
-
+			r := panicRecover(recover())
 			if r != nil {
-				switch t := r.(type) {
-				case string:
-					err = errors.New(t)
-				case error:
-					err = t
-				default:
-					err = errors.New("Unknown error")
-				}
-
-				publishError(err, request, true)
-
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				publishError(r, request, true)
+				http.Error(w, r.Error(), http.StatusInternalServerError)
 			}
 		}()
 		h(w, r, ps)
@@ -128,24 +114,14 @@ func CaptureHTTPRouterHandler(h httprouter.Handle) httprouter.Handle {
 
 // CaptureNegroniHandler handle panic on negroni handler.
 func CaptureNegroniHandler(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	var err error
 	request, _ := httputil.DumpRequest(r, true)
 	defer func() {
-		r := recover()
-
-		if r != nil {
-			switch t := r.(type) {
-			case string:
-				err = errors.New(t)
-			case error:
-				err = t
-			default:
-				err = errors.New("Unknown error")
+		if !recoveryBreak() {
+			r := panicRecover(recover())
+			if r != nil {
+				publishError(r, request, true)
+				http.Error(w, r.Error(), http.StatusInternalServerError)
 			}
-
-			publishError(err, request, true)
-
-			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}()
 	next(w, r)
@@ -182,52 +158,51 @@ func CaptureBadDeployment() {
 	}
 }
 
+// CaptureNSQConsumer capture panics on NSQ consumer
 func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
 	return func(message *nsq.Message) error {
-		var err error
 		defer func() {
-			r := recover()
-
+			r := panicRecover(recover())
 			if r != nil {
-				switch t := r.(type) {
-				case string:
-					err = errors.New(t)
-				case error:
-					err = t
-				default:
-					err = errors.New("Unknown error")
-				}
-
-				publishError(err, nil, true)
+				publishError(r, nil, true)
 			}
 		}()
 		return handler(message)
 	}
 }
 
-func panicRecover() {
-	var err error
-
-	r := cb.Run(func() error {
-		r := recover()
-		if r != nil {
-			switch t := r.(type) {
-			case string:
-				err = errors.New(t)
-			case error:
-				err = t
-			default:
-				err = errors.New("Unknown error")
-			}
-
-			publishError(err, nil, true)
-		}
-		return err
-	})
-
-	if r == breaker.ErrBreakerOpen {
-		return
+func panicRecover(rc interface{}) error {
+	if cb != nil {
+		r := cb.Run(func() error {
+			return recovery(rc)
+		})
+		return r
 	}
+	return recovery(rc)
+}
+
+func recoveryBreak() bool {
+	if err := cb.Run(func() error {
+		return nil
+	}); err == breaker.ErrBreakerOpen {
+		return true
+	}
+	return false
+}
+
+func recovery(r interface{}) error {
+	var err error
+	if r != nil {
+		switch t := r.(type) {
+		case string:
+			err = errors.New(t)
+		case error:
+			err = t
+		default:
+			err = errors.New("Unknown error")
+		}
+	}
+	return err
 }
 
 func publishError(errs error, reqBody []byte, withStackTrace bool) {
