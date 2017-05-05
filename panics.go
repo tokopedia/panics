@@ -77,7 +77,7 @@ func SetOptions(o *Options) {
 func init() {
 	env = os.Getenv("TKPENV")
 	// circuitbreaker to let apps died when got too many panics
-	cb = breaker.New(10, 2, time.Minute*2)
+	cb = breaker.New(3, 2, time.Minute*1)
 }
 
 // CaptureHandler handle panic on http handler.
