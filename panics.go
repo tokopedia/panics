@@ -102,10 +102,12 @@ func CaptureHTTPRouterHandler(h httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		request, _ := httputil.DumpRequest(r, true)
 		defer func() {
-			r := panicRecover(recover())
-			if r != nil {
-				publishError(r, request, true)
-				http.Error(w, r.Error(), http.StatusInternalServerError)
+			if !recoveryBreak() {
+				r := panicRecover(recover())
+				if r != nil {
+					publishError(r, request, true)
+					http.Error(w, r.Error(), http.StatusInternalServerError)
+				}
 			}
 		}()
 		h(w, r, ps)
