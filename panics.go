@@ -184,6 +184,10 @@ func panicRecover(rc interface{}) error {
 }
 
 func recoveryBreak() bool {
+	if cb == nil {
+		return false
+	}
+
 	if err := cb.Run(func() error {
 		return nil
 	}); err == breaker.ErrBreakerOpen {
