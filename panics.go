@@ -173,6 +173,37 @@ func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
 	}
 }
 
+// CaptureNSQConsumerHandler capture panics on NSQ consumer
+func CaptureNSQConsumerHandler(handler nsq.Handler) nsq.HandlerFunc {
+
+	return func(message *nsq.Message) error {
+
+		defer func() {
+			r := panicRecover(recover())
+			if r != nil {
+				publishError(r, nil, true)
+			}
+		}()
+
+		return handler.HandleMessage(message)
+
+	}
+}
+
+// CaptureGoRoutine capture panics on Go Routine
+func CaptureGoRoutine(f func()) func() {
+	return func() {
+		defer func() {
+			r := panicRecover(recover())
+			if r != nil {
+				publishError(r, nil, true)
+			}
+		}()
+
+		f()
+	}
+}
+
 func panicRecover(rc interface{}) error {
 	if cb != nil {
 		r := cb.Run(func() error {
