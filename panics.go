@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"strings"
 
 	"github.com/eapache/go-resiliency/breaker"
@@ -127,6 +129,24 @@ func CaptureNegroniHandler(w http.ResponseWriter, r *http.Request, next http.Han
 		}
 	}()
 	next(w, r)
+}
+
+// CaptureGinHandler handle panic on gin handler.
+func CaptureGinHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		request, _ := httputil.DumpRequest(c.Request, true)
+		defer func() {
+			if !recoveryBreak() {
+				r := panicRecover(recover())
+				if r != nil {
+					publishError(r, request, true)
+					http.Error(c.Writer, r.Error(), http.StatusInternalServerError)
+				}
+			}
+		}()
+
+		c.Next()
+	}
 }
 
 // Capture will publish any errors
