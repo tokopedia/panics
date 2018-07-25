@@ -19,6 +19,8 @@ import (
 
 	"strings"
 
+	"github.com/tokopedia/panics/svc/throttle"
+
 	"github.com/eapache/go-resiliency/breaker"
 	"github.com/julienschmidt/httprouter"
 	"github.com/nsqio/go-nsq"
@@ -34,6 +36,7 @@ var (
 	capturedBadDeployment bool
 	customMessage         string
 
+	checkThrottle bool
 	// circuitbreaker
 	cb *breaker.Breaker
 )
@@ -52,8 +55,13 @@ type Options struct {
 	Tags            Tags
 	CustomMessage   string
 	DontLetMeDie    bool
+
+	MaxSendMessage        int // maximum message being send to channel
+	RetrySendMessageAfter int // time in second
+	FlagThrottle          bool
 }
 
+//SetOptions setting up general function
 func SetOptions(o *Options) {
 	filepath = o.Filepath
 	slackWebhookURL = o.SlackWebhookURL
@@ -73,6 +81,13 @@ func SetOptions(o *Options) {
 	if o.DontLetMeDie {
 		cb = nil
 	}
+
+	//add new flag function
+	if o.FlagThrottle {
+		checkThrottle = true
+		throttle.Setup(o.MaxSendMessage, o.RetrySendMessageAfter)
+	}
+
 	CaptureBadDeployment()
 }
 
@@ -80,6 +95,7 @@ func init() {
 	env = os.Getenv("TKPENV")
 	// circuitbreaker to let apps died when got too many panics
 	cb = breaker.New(3, 2, time.Minute*1)
+
 }
 
 // CaptureHandler handle panic on http handler.
@@ -232,6 +248,13 @@ func recovery(r interface{}) error {
 }
 
 func publishError(errs error, reqBody []byte, withStackTrace bool) {
+	//do nothing if system exeding threshold that was being put on in
+	if checkThrottle {
+		if !throttle.AllowedSend() {
+
+		}
+	}
+
 	var text string
 	var snip string
 	var buffer bytes.Buffer
@@ -274,6 +297,12 @@ func publishError(errs error, reqBody []byte, withStackTrace bool) {
 }
 
 func postToSlack(text, snip string) {
+	//do nothing if system exeding threshold that was being put on in
+	if checkThrottle {
+		if !throttle.AllowedSend() {
+			return
+		}
+	}
 	payload := map[string]interface{}{
 		"text": text,
 		//Enable slack to parse mention @<someone>
