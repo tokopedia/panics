@@ -12,14 +12,13 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-
-	"strings"
-
 	"github.com/eapache/go-resiliency/breaker"
+	"github.com/gin-gonic/gin"
+	chi "github.com/go-chi/chi/middleware"
 	"github.com/julienschmidt/httprouter"
 	"github.com/nsqio/go-nsq"
 )
@@ -191,6 +190,37 @@ func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
 		}()
 		return handler(message)
 	}
+}
+
+// ChiRecoverMiddleware act as middleware that capture panics on go-chi http handler
+// r := chi.NewRouter()
+// r.Use(ChiRecoverMiddleware)
+func ChiRecoverMiddleware(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		request, _ := httputil.DumpRequest(r, true)
+		defer func() {
+			if !recoveryBreak() {
+				rcv := panicRecover(recover())
+				if rcv != nil {
+					// log the panic
+					logEntry := chi.GetLogEntry(r)
+					if logEntry != nil {
+						logEntry.Panic(rcv, debug.Stack())
+					} else {
+						fmt.Fprintf(os.Stderr, "Panic: %+v\n", rcv)
+						debug.PrintStack()
+					}
+
+					publishError(rcv, request, true)
+					http.Error(w, rcv.Error(), http.StatusInternalServerError)
+				}
+			}
+		}()
+
+		next.ServeHTTP(w, r)
+	}
+
+	return http.HandlerFunc(fn)
 }
 
 func panicRecover(rc interface{}) error {
