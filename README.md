@@ -61,6 +61,15 @@ q.AddHandler(panics.CaptureNSQConsumer(func(message *nsq.Message) error {
 }))
 ```
 
+# Capture panic on go-chi router
+```go
+r := chi.NewRouter()
+r.Use(panics.ChiRecoverMiddleware)
+r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	panic("panic from affiliate server")
+})
+```
+
 ## Example
 ### Slack Notification
 ![Notification Example](https://monosnap.com/file/Pjkw1uxjV8p0GnjevDwhHesUnTC2Ru.png)

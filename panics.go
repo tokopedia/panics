@@ -194,7 +194,7 @@ func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
 
 // ChiRecoverMiddleware act as middleware that capture panics on go-chi http handler
 // r := chi.NewRouter()
-// r.Use(ChiRecoverMiddleware)
+// r.Use(panics.ChiRecoverMiddleware)
 func ChiRecoverMiddleware(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		request, _ := httputil.DumpRequest(r, true)
