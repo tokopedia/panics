@@ -12,14 +12,12 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-
-	"strings"
-
 	"github.com/eapache/go-resiliency/breaker"
+	"github.com/gin-gonic/gin"
 	"github.com/julienschmidt/httprouter"
 	"github.com/nsqio/go-nsq"
 )
@@ -191,6 +189,29 @@ func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
 		}()
 		return handler(message)
 	}
+}
+
+// HTTPRecoveryMiddleware act as middleware that capture panics standard in http handler
+func HTTPRecoveryMiddleware(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		request, _ := httputil.DumpRequest(r, true)
+		defer func() {
+			if !recoveryBreak() {
+				rcv := panicRecover(recover())
+				if rcv != nil {
+					// log the panic
+					fmt.Fprintf(os.Stderr, "Panic: %+v\n", rcv)
+					debug.PrintStack()
+					publishError(rcv, request, true)
+					http.Error(w, rcv.Error(), http.StatusInternalServerError)
+				}
+			}
+		}()
+
+		next.ServeHTTP(w, r)
+	}
+
+	return http.HandlerFunc(fn)
 }
 
 func panicRecover(rc interface{}) error {
