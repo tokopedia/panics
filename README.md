@@ -78,7 +78,7 @@ server := grpc.NewServer(
 		// use another interceptor
 		grpc_validator.UnaryServerInterceptor(),
 		// use panic interceptor
-		panics.GRPCPanicsIterceptor,
+		panics.GRPCPanicsInterceptor,
 	)),
 )
 ```

@@ -213,8 +213,8 @@ func HTTPRecoveryMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-// GRPCPanicsIterceptor intercept executed the publishError before sending back result to client when panic happen
-func GRPCPanicsIterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+// GRPCPanicsInterceptor intercept executed the publishError before sending back result to client when panic happen
+func GRPCPanicsInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	defer func() {
 		if !recoveryBreak() {
 			rcv := panicRecover(recover())
