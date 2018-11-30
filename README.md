@@ -61,10 +61,11 @@ q.AddHandler(panics.CaptureNSQConsumer(func(message *nsq.Message) error {
 }))
 ```
 
-# Capture panic on go-chi router
+# Use panic as middleware on standard http.Handler
 ```go
+//for example we use chi router
 r := chi.NewRouter()
-r.Use(panics.ChiRecoverMiddleware)
+r.Use(panics.HTTPRecoveryMiddleware)
 r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 	panic("panic from affiliate server")
 })
