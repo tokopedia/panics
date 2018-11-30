@@ -2,6 +2,7 @@ package panics
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,24 +21,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/julienschmidt/httprouter"
 	"github.com/nsqio/go-nsq"
+	"google.golang.org/grpc"
 )
 
 var (
-	env             string
-	filepath        string
-	slackWebhookURL string
-	slackChannel    string
-	tagString       string
-
+	env                   string
+	filepath              string
+	slackWebhookURL       string
+	slackChannel          string
+	tagString             string
 	capturedBadDeployment bool
 	customMessage         string
-
-	// circuitbreaker
+	// circuit breaker
 	cb *breaker.Breaker
+	// ErrorPanic variable used as global error message
+	ErrorPanic = errors.New("Panic happened")
 )
-
-// error
-var ErrorPanic = errors.New("Panic happened")
 
 type Tags map[string]string
 
@@ -212,6 +211,21 @@ func HTTPRecoveryMiddleware(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(fn)
+}
+
+// GRPCPanicsIterceptor intercept executed the publishError before sending back result to client when panic happen
+func GRPCPanicsIterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	defer func() {
+		if !recoveryBreak() {
+			rcv := panicRecover(recover())
+			if rcv != nil {
+				fmt.Fprintf(os.Stderr, "Panic: %+v\n", rcv)
+				debug.PrintStack()
+				publishError(rcv, nil, true)
+			}
+		}
+	}()
+	return handler(ctx, req)
 }
 
 func panicRecover(rc interface{}) error {
