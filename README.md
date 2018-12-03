@@ -71,6 +71,18 @@ r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 })
 ```
 
+# Use panic as server interceptor on GRPC Server
+```go
+server := grpc.NewServer(
+	grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+		// use another interceptor
+		grpc_validator.UnaryServerInterceptor(),
+		// use panic's unary interceptor
+		panics.UnaryServerInterceptor,
+	)),
+)
+```
+
 ## Example
 ### Slack Notification
 ![Notification Example](https://monosnap.com/file/Pjkw1uxjV8p0GnjevDwhHesUnTC2Ru.png)
