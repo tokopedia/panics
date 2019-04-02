@@ -160,6 +160,20 @@ func Capture(err string, message ...string) {
 	publishError(errors.New(err), []byte(tmp), false)
 }
 
+// Capture will publish any errors with stack trace
+func CaptureWithStackTrace(err string, message ...string) {
+	var tmp string
+	for i, val := range message {
+		if i == 0 {
+			tmp += val
+		} else {
+			tmp += fmt.Sprintf("\n\n%s", val)
+		}
+	}
+
+	publishError(errors.New(err), []byte(tmp), true)
+}
+
 // CaptureBadDeployment will listen to SIGCHLD signal, and send notification when it's receive one.
 func CaptureBadDeployment() {
 	if !capturedBadDeployment {
