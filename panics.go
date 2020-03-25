@@ -204,6 +204,24 @@ func CaptureNSQConsumer(handler nsq.HandlerFunc) nsq.HandlerFunc {
 	}
 }
 
+// CaptureGoroutine wrap function call with goroutines and send notification when there's panic inside it
+//
+// Receives handle function that will be executed on normal condition and recovery function that will be executed in-case there's panic
+func CaptureGoroutine(handleFn func(), recoveryFn func()) {
+	defer func() {
+		if !recoveryBreak() {
+			rcv := panicRecover(recover())
+			if rcv != nil {
+				fmt.Fprintf(os.Stderr, "Panic: %+v\n", rcv)
+				debug.PrintStack()
+				publishError(rcv, nil, true)
+				recoveryFn()
+			}
+		}
+	}()
+	handleFn()
+}
+
 // HTTPRecoveryMiddleware act as middleware that capture panics standard in http handler
 func HTTPRecoveryMiddleware(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {

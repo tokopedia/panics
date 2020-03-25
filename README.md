@@ -31,6 +31,7 @@ http.HandleFunc("/", panics.CaptureHandler(func(w http.ResponseWriter, r *http.R
 	panic("Duh aku panik nih guys")
 }))
 ```
+> Panic inside goroutine in the call stack will not be handled, use CaptureGoroutine
 
 ## Capture Panic on httprouter handler
 ```go
@@ -39,6 +40,7 @@ router.POST("/", panics.CaptureHTTPRouterHandler(func(w http.ResponseWriter, r *
     panic("Duh httprouter aku panik nih guys")
 }))
 ```
+> Panic inside goroutine in the call stack will not be handled, use CaptureGoroutine
 
 ## Capture Panic on negroni custom middleware
 ```go
@@ -48,8 +50,9 @@ http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 negro := negroni.New()
 negro.Use(negroni.HandlerFunc(CaptureNegroniHandler))
 ```
+> Panic inside goroutine in the call stack will not be handled, use CaptureGoroutine
 
-# Capture panic on nsq consumer
+## Capture panic on nsq consumer
 ```go
 q, _ := nsq.NewConsumer("topic", "channel", nsq.NewConfig())
 
@@ -60,8 +63,9 @@ q.AddHandler(panics.CaptureNSQConsumer(func(message *nsq.Message) error {
 	return nil
 }))
 ```
+> Panic inside goroutine in the call stack will not be handled, use CaptureGoroutine
 
-# Use panic as middleware on standard http.Handler
+## Use panic as middleware on standard http.Handler
 ```go
 //for example we use chi router
 r := chi.NewRouter()
@@ -70,8 +74,9 @@ r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 	panic("panic from affiliate server")
 })
 ```
+> Panic inside goroutine in the call stack will not be handled, use CaptureGoroutine
 
-# Use panic as server interceptor on GRPC Server
+## Use panic as server interceptor on GRPC Server
 ```go
 server := grpc.NewServer(
 	grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
@@ -81,6 +86,38 @@ server := grpc.NewServer(
 		panics.UnaryServerInterceptor,
 	)),
 )
+```
+> Panic inside goroutine in the call stack will not be handled, use CaptureGoroutine
+
+## Use panic to wrap goroutine call
+```go
+// doSomething will be called with a goroutine
+func doSomething(dataChan chan string) {
+	panic("duh aku ingin panik di dalam goroutine guys")
+	dataChan <- "MyData"
+}
+
+func MyHTTPHandler() {
+	dataChan := make(chan string)
+
+	go panics.CaptureGoroutine(
+		func(){
+			// function to be executed inside goroutine
+			doSomething(dataChan)
+		},
+		func(){
+			// recovery codes in-case panics happen
+			//in this case, fill channel with empty data
+			dataChan <- ""
+		}
+	)
+
+	select {
+		case data := <- dataChan:
+			fmt.Println(data)
+		default:
+	}
+}
 ```
 
 ## Example
