@@ -85,3 +85,75 @@ func TestCaptureWithStackTrace(t *testing.T) {
 	}
 
 }
+
+func TestCaptureGoroutine(t *testing.T) {
+	type args struct {
+		handleFn   func()
+		recoveryFn func()
+	}
+	type want struct {
+		handleFnCalledTimes   int
+		recoveryFnCalledTimes int
+	}
+
+	handleFnCalledTimes := 0
+	recoveryFnCalledTimes := 0
+	done := make(chan bool)
+	tests := []struct {
+		name string
+		args args
+		want want
+	}{
+		{
+			name: "handleFn executed and not panic, shouldn't trigger recoveryFn",
+			args: args{
+				handleFn: func() {
+					handleFnCalledTimes++
+					done <- true
+				},
+				recoveryFn: func() {
+					recoveryFnCalledTimes++
+					done <- true
+				},
+			},
+			want: want{
+				handleFnCalledTimes:   1,
+				recoveryFnCalledTimes: 0,
+			},
+		},
+		{
+			name: "handleFn executed and panic, should trigger recoveryFn",
+			args: args{
+				handleFn: func() {
+					handleFnCalledTimes++
+					panic("panic here")
+				},
+				recoveryFn: func() {
+					recoveryFnCalledTimes++
+					done <- true
+				},
+			},
+			want: want{
+				handleFnCalledTimes:   1,
+				recoveryFnCalledTimes: 1,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handleFnCalledTimes = 0
+			recoveryFnCalledTimes = 0
+			go CaptureGoroutine(tt.args.handleFn, tt.args.recoveryFn)
+			select {
+			case <-done:
+			}
+			if handleFnCalledTimes != tt.want.handleFnCalledTimes {
+				t.Errorf("HandleFn was called %v times, expected %v times", handleFnCalledTimes, tt.want.handleFnCalledTimes)
+			}
+			if recoveryFnCalledTimes != tt.want.recoveryFnCalledTimes {
+				t.Errorf("RecoveryFn was called %v times, expected %v times", recoveryFnCalledTimes, tt.want.recoveryFnCalledTimes)
+			}
+		})
+	}
+}
