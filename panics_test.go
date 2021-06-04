@@ -21,7 +21,14 @@ func TestPostToSlack(t *testing.T) {
 	postToSlack("hello", "world")
 }
 
+type datadogMock struct{}
+
+func (d *datadogMock) Count(name string, value int64, tags []string, rate float64) error {
+	return nil
+}
+
 func TestCaptureWithStackTrace(t *testing.T) {
+	datadogClient = &datadogMock{}
 	tests := []struct {
 		name     string
 		errStr   string

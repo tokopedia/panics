@@ -36,7 +36,17 @@ var (
 	cb *breaker.Breaker
 	// ErrorPanic variable used as global error message
 	ErrorPanic = errors.New("Panic happened")
+
+	datadogClient DatadogClient
+	serviceName   string
+	// use specific tags env and serviceName when adding monitoring datadog when panic occured
+	datadogMetricName = "panic.capture_panic"
 )
+
+// DatadogClient is the interface of the datadog client used by panic lib
+type DatadogClient interface {
+	Count(name string, value int64, tags []string, rate float64) error
+}
 
 type Tags map[string]string
 
@@ -49,6 +59,8 @@ type Options struct {
 	Tags            Tags
 	CustomMessage   string
 	DontLetMeDie    bool
+	DatadogClient   DatadogClient
+	ServiceName     string
 }
 
 func SetOptions(o *Options) {
@@ -65,6 +77,8 @@ func SetOptions(o *Options) {
 	tagString = strings.Join(tmp, " | ")
 
 	customMessage = o.CustomMessage
+
+	datadogClient, serviceName = o.DatadogClient, o.ServiceName
 
 	// set circuit breaker to nil
 	if o.DontLetMeDie {
@@ -337,6 +351,10 @@ func publishError(errs error, reqBody []byte, withStackTrace bool) {
 			file.Write([]byte(snip + "\r\n"))
 			file.Close()
 		}()
+	}
+	if datadogClient != nil {
+		tags := []string{fmt.Sprintf("service:%s", serviceName), fmt.Sprintf("env:%s", env)}
+		go datadogClient.Count(datadogMetricName, 1, tags, 1)
 	}
 }
 
